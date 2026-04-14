@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Monitor Académico - Tutoría</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <div class="header">
+    <h1>Monitor Académico</h1>
+    <p class="subtitle">Desglose de Productividad y Calificaciones</p>
+  </div>
+
+  <div class="control-panel">
+    <div class="input-group">
+      <div class="custom-select-wrapper">
+        <select id="grupo"><option value="">Cargando grupos...</option></select>
+      </div>
+      <button onclick="buscarGrupo()">VER GRUPO</button>
+    </div>
+  </div>
+
+  <!-- CONTENEDOR PRINCIPAL -->
+  <div id="resultado" class="resultado-container"></div>
+
+  <!-- PANEL DETALLADO DEL ALUMNO (Modal) -->
+  <div id="modalAlumno" class="modal-alumno">
+    <div class="modal-contenido">
+      <button class="btn-cerrar" onclick="cerrarModalAlumno()">✕</button>
+      
+      <!-- LEFT PANEL: PERFIL Y STATS -->
+      <div class="panel-izquierdo">
+        <div class="perfil-alumno">
+          <div class="avatar">🎓</div>
+          <h2 id="modalNombre"></h2>
+          <p id="modalMatricula" class="matricula"></p>
+          <hr>
+          <div class="stat-item">
+            <span class="label">PROMEDIO GENERAL</span>
+            <span id="modalPromedio" class="valor-grande">0.0</span>
+            <span id="modalEstado" class="estado-badge">Crítico</span>
+          </div>
+          <div class="stat-item">
+            <span class="label">ENTREGA DE TRABAJOS</span>
+            <div class="progress-bar">
+              <div id="modalProductividad" class="progress-fill" style="width:0%"></div>
+            </div>
+            <span id="modalProductividadPorcentaje" class="porcentaje">0%</span>
+          </div>
+          <div class="stat-item">
+            <span class="label">ASISTENCIA</span>
+            <div class="progress-bar">
+              <div class="progress-fill" style="width:85%; background:#10B981"></div>
+            </div>
+            <span class="porcentaje">85%</span>
+          </div>
+          <div class="stat-item">
+            <span class="label">COMPORTAMIENTO</span>
+            <span class="emoji-feedback">😊 Muy Bueno</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- CENTER PANEL: MATERIAS Y ACTIVIDADES -->
+      <div class="panel-centro">
+        <h3>MATERIAS & PROGRESO ACADÉMICO</h3>
+        <div id="modalMaterias" class="lista-materias"></div>
+      </div>
+
+      <!-- RIGHT PANEL: FORTALEZAS Y RECOMENDACIONES -->
+      <div class="panel-derecho">
+        <div class="card-fortalezas">
+          <h4>⭐ FORTALEZAS</h4>
+          <div id="modalFortalezas" class="fortalezas-list"></div>
+        </div>
+        
+        <div class="card-mejora">
+          <h4>⚠️ ÁREAS DE MEJORA</h4>
+          <div id="modalMejora" class="mejora-list"></div>
+        </div>
+
+        <div class="card-recomendaciones">
+          <h4>✅ PRÓXIMOS PASOS</h4>
+          <div id="modalRecomendaciones" class="recomendaciones-list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="timer-info"></div>
+
+  <!-- Scripts -->
+  <script src="firebase-config.js"></script>
+  <script type="module" src="app.js"></script>
+
+</body>
+</html>
