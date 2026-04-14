@@ -1,5 +1,5 @@
 // ============================================================
-//  app.js — Monitor Académico (adaptado a tu Firebase real)
+//  app.js — Monitor Académico para Tutoría (DISEÑO NUEVO)
 // ============================================================
 
 import { initializeApp }         from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
@@ -10,15 +10,14 @@ const app  = initializeApp(firebaseConfig);
 const db   = getDatabase(app);
 const auth = getAuth(app);
 
-// ── SEMÁFORO ─────────────────────────────────────────────
+// ── FUNCIONES AUXILIARES ───────────────────────────────────
 function getStatusObj(valor) {
-  if (valor >= 9) return { emoji: "😎", texto: "Excelente",     color: "#3B82F6" };
-  if (valor >= 8) return { emoji: "🙂", texto: "Satisfactorio", color: "#10B981" };
-  if (valor >= 6) return { emoji: "⚠️", texto: "En Riesgo",     color: "#F59E0B" };
-  return             { emoji: "😓", texto: "Crítico",          color: "#EF4444" };
+  if (valor >= 9) return { emoji: "😎", texto: "Excelente",     clase: "excelente" };
+  if (valor >= 8) return { emoji: "🙂", texto: "Satisfactorio", clase: "bueno" };
+  if (valor >= 6) return { emoji: "⚠️", texto: "En Riesgo",     clase: "riesgo" };
+  return             { emoji: "😓", texto: "Crítico",          clase: "critico" };
 }
 
-// ── PARSEO DE FECHA ("dd/MM/yyyy" o "---") ────────────────
 function parseFecha(val) {
   if (!val || val === "---" || val === "") return null;
   const partes = String(val).split("/");
@@ -30,7 +29,7 @@ function parseFecha(val) {
   return isNaN(d.getTime()) ? null : d;
 }
 
-// ── CARGAR GRUPOS ────────────────────────────────────────
+// ── CARGAR GRUPOS ──────────────────────────────────────────
 async function cargarGrupos() {
   const sel = document.getElementById("grupo");
   sel.innerHTML = "<option value=''>Cargando grupos…</option>";
@@ -54,7 +53,7 @@ async function cargarGrupos() {
   }
 }
 
-// ── BÚSQUEDA PRINCIPAL ───────────────────────────────────
+// ── BÚSQUEDA PRINCIPAL ─────────────────────────────────────
 async function buscarGrupo() {
   const grupoInput = document.getElementById("grupo").value;
   if (!grupoInput) return alert("⚠️ Por favor selecciona un grupo");
@@ -64,7 +63,7 @@ async function buscarGrupo() {
   const FECHA_CORTE  = new Date(); FECHA_CORTE.setHours(23, 59, 59, 999);
 
   resultDiv.innerHTML = `
-    <div style="text-align:center;width:100%;margin-top:60px;grid-column:1/-1">
+    <div class="loading-container">
       <div class="spinner"></div>
       <p class="loading-text">Consultando Firebase…</p>
     </div>`;
@@ -100,7 +99,6 @@ async function buscarGrupo() {
     if (alumnosGrupo.length === 0) return mostrarError("⚠️ No se encontraron alumnos en ese grupo.");
 
     // 2. CALIFICACIONES
-    // Estructura: /calificaciones/{correo_con_puntos_a_guiones} = ARRAY
     const snapCalif = await get(ref(db, DB_NODES.calificaciones));
     const mapaData  = {};
 
@@ -108,7 +106,6 @@ async function buscarGrupo() {
       snapCalif.forEach(child => {
         const registros = child.val();
         if (!Array.isArray(registros) || registros.length === 0) return;
-        // El correo real está dentro del primer registro
         const correoReal = (registros[0][CAMPOS_CALIF.correo] || "").toLowerCase().trim();
         if (correosSet.has(correoReal)) {
           mapaData[correoReal] = registros;
@@ -192,115 +189,149 @@ async function buscarGrupo() {
   }
 }
 
-// ── RENDER ───────────────────────────────────────────────
+// ── RENDER (GRID DE TARJETAS) ──────────────────────────────
 function render(data) {
   if (!data || data.length === 0) return mostrarError("No hay alumnos.");
   data.sort((a, b) => a.alumno.nombre.localeCompare(b.alumno.nombre));
 
   let html = "";
-  data.forEach((d, idx) => {
+  data.forEach((d) => {
     const { promedio, productividad, statusInfo: st } = d.globales;
     const sinDatos = d.resumen.length === 0;
 
     html += `
-    <div class="alumno-contenedor" id="cont-${idx}">
-      <div class="alumno-box" onclick="toggleExpand(${idx})">
-        <div class="box-content-top">
-          <div class="alumno-icon">🎓</div>
-          <div class="alumno-name">${d.alumno.nombre}</div>
-          <p class="alumno-mat">${d.alumno.matricula}</p>
-          <div class="global-stats">
-            <div class="stat-card">
-              <span class="stat-label">Promedio</span>
-              <span class="stat-value" style="color:#4F46E5">⭐ ${sinDatos ? "—" : promedio}</span>
-            </div>
-            <div class="stat-card">
-              <span class="stat-label">Avance</span>
-              <span class="stat-value" style="color:#10B981">📊 ${sinDatos ? "—" : productividad + "%"}</span>
-            </div>
-          </div>
-        </div>
-        <div class="status-bar" style="background:${sinDatos ? "#9CA3AF" : st.color}">
-          ${sinDatos ? "📭 Sin registros" : st.emoji + " " + st.texto}
+    <div class="tarjeta-alumno" onclick="abrirModalAlumno(${JSON.stringify(d).replace(/"/g, '&quot;')})">
+      <div class="tarjeta-header">
+        <div class="tarjeta-avatar">🎓</div>
+        <div class="tarjeta-info">
+          <h3>${d.alumno.nombre}</h3>
+          <p>${d.alumno.matricula}</p>
         </div>
       </div>
-      <div class="detalle-alumno" id="det-${idx}">`;
-
-    if (sinDatos) {
-      html += `<div class="subject-box" style="justify-content:center;color:#94a3b8;">📭 No hay calificaciones registradas</div>`;
-    } else {
-      d.resumen.forEach((mat, mIdx) => {
-        const uid = `w-${idx}-${mIdx}`, bid = `b-${idx}-${mIdx}`;
-        html += `
-        <div id="${bid}" class="subject-box" onclick="toggleMateria('${uid}','${bid}',${idx})">
-          <div class="subject-info">
-            <span class="subject-name">${mat.materia}</span>
-            <span class="prof-name">👨‍🏫 ${mat.profesor || "Sin asignar"}</span>
-          </div>
-          <div class="indicators">
-            <span class="badge badge-avg">⭐ ${mat.promedio}</span>
-            <span class="badge badge-prog">📊 ${mat.productividad}%</span>
-          </div>
-        </div>
-        <div id="${uid}" class="materia-content-wrapper">
-          <table class="actividad-table">
-            <thead><tr><th>Actividad</th><th>Fecha</th><th>Nota</th></tr></thead>
-            <tbody>`;
-        mat.actividades.forEach(a => {
-          const cls = (a.calificacion !== "—" && Number(a.calificacion) < 6) ? "score-bad" : "score-good";
-          html += `<tr><td>${a.actividad}</td><td>${a.fecha}</td><td class="${cls}">${a.calificacion}</td></tr>`;
-        });
-        html += `</tbody></table></div>`;
-      });
-    }
-    html += `</div></div>`;
+      
+      <div class="tarjeta-stats">
+        <span class="stat-badge ${st.clase}">⭐ ${promedio}</span>
+        <span class="stat-badge">📊 ${productividad}%</span>
+      </div>
+      
+      <div class="tarjeta-status status-${st.clase}">
+        ${st.emoji} ${st.texto}
+      </div>
+    </div>`;
   });
 
   document.getElementById("resultado").innerHTML = html;
-  document.querySelectorAll(".alumno-contenedor").forEach((el, i) => {
-    setTimeout(() => el.classList.add("fade-in"), i * 70);
-  });
 }
 
 function mostrarError(msg) {
-  document.getElementById("resultado").innerHTML = `<div class="mensaje" style="grid-column:1/-1">${msg}</div>`;
+  document.getElementById("resultado").innerHTML = `<div class="error-message">${msg}</div>`;
 }
 
-// ── INTERACCIONES UI ─────────────────────────────────────
-window.toggleExpand = function(idx) {
-  const target = document.getElementById(`cont-${idx}`);
-  const isExpanded = target.classList.contains("expanded");
-  document.querySelectorAll(".alumno-contenedor").forEach(c => {
-    c.classList.remove("expanded", "dimmed");
-    const det = c.querySelector(".detalle-alumno");
-    if (det) det.style.display = "none";
-    c.querySelector(".alumno-box").classList.remove("active", "inactive");
-  });
-  if (!isExpanded) {
-    target.classList.add("expanded");
-    target.querySelector(".alumno-box").classList.add("active");
-    document.getElementById(`det-${idx}`).style.display = "block";
-    document.querySelectorAll(".alumno-contenedor").forEach((c, i) => {
-      if (i !== idx) { c.classList.add("dimmed"); c.querySelector(".alumno-box").classList.add("inactive"); }
+// ── MODAL DEL ALUMNO ───────────────────────────────────────
+window.abrirModalAlumno = function(datos) {
+  const modal = document.getElementById("modalAlumno");
+  const st = datos.globales.statusInfo;
+
+  document.getElementById("modalNombre").textContent = datos.alumno.nombre;
+  document.getElementById("modalMatricula").textContent = "Matrícula: " + datos.alumno.matricula;
+  document.getElementById("modalPromedio").textContent = datos.globales.promedio;
+  document.getElementById("modalEstado").textContent = st.texto;
+  document.getElementById("modalEstado").className = `estado-badge stat-badge-${st.clase}`;
+  
+  const prodNum = parseFloat(datos.globales.productividad);
+  document.getElementById("modalProductividad").style.width = prodNum + "%";
+  document.getElementById("modalProductividadPorcentaje").textContent = datos.globales.productividad + "%";
+
+  // Materias
+  let materiasHTML = "";
+  datos.resumen.forEach(mat => {
+    let actHTML = `
+      <div class="actividades-tabla">
+        <table>
+          <thead>
+            <tr>
+              <th>Actividad</th>
+              <th>Fecha</th>
+              <th>Nota</th>
+              <th>Estado</th>
+            </tr>
+          </thead>
+          <tbody>`;
+    
+    mat.actividades.slice(0, 5).forEach(a => {
+      const cls = (a.calificacion !== "—" && Number(a.calificacion) < 6) ? "calificacion-bad" : "calificacion-good";
+      actHTML += `
+        <tr>
+          <td>${a.actividad.substring(0, 20)}</td>
+          <td>${a.fecha}</td>
+          <td class="${cls}">${a.calificacion}</td>
+          <td class="status-completed">✓</td>
+        </tr>`;
     });
-    setTimeout(() => target.scrollIntoView({ behavior: "smooth", block: "start" }), 300);
+    
+    actHTML += `</tbody></table></div>`;
+
+    materiasHTML += `
+    <div class="materia-item">
+      <div class="materia-header">
+        <div>
+          <div class="materia-nombre">${mat.materia}</div>
+          <div class="profesor-nombre">👨‍🏫 ${mat.profesor || "Sin asignar"}</div>
+        </div>
+        <div class="materia-badges">
+          <span class="badge-promedio">⭐ ${mat.promedio}</span>
+          <span class="badge-avance">📈 ${mat.productividad}%</span>
+        </div>
+      </div>
+      ${actHTML}
+    </div>`;
+  });
+
+  document.getElementById("modalMaterias").innerHTML = materiasHTML || "<p>Sin materias registradas</p>";
+
+  // Fortalezas
+  const fortalezas = datos.resumen
+    .filter(m => parseFloat(m.promedio) >= 8)
+    .map(m => `<div class="fortaleza-item">📌 ${m.materia}: ${m.promedio}</div>`)
+    .join("");
+  document.getElementById("modalFortalezas").innerHTML = fortalezas || "<div class='fortaleza-item'>Por mejorar</div>";
+
+  // Áreas de mejora
+  const mejora = datos.resumen
+    .filter(m => parseFloat(m.promedio) < 6)
+    .map(m => `<div class="mejora-item">⚠️ ${m.materia}: ${m.promedio}</div>`)
+    .join("");
+  document.getElementById("modalMejora").innerHTML = mejora || "<div class='mejora-item'>¡Muy bien!</div>";
+
+  // Recomendaciones
+  let recomendaciones = "";
+  if (parseFloat(datos.globales.promedio) < 6) {
+    recomendaciones += `<div class="recom-item">📌 Aumentar dedicación a materias con bajo promedio</div>`;
+  }
+  if (parseFloat(datos.globales.productividad) < 80) {
+    recomendaciones += `<div class="recom-item">📌 Mejorar cumplimiento de entregas</div>`;
+  }
+  if (parseFloat(datos.globales.promedio) >= 9) {
+    recomendaciones += `<div class="recom-item">🎉 ¡Excelente desempeño! Mantén el ritmo</div>`;
+  }
+  
+  document.getElementById("modalRecomendaciones").innerHTML = recomendaciones || "<div class='recom-item'>Continuar con buen desempeño</div>";
+
+  modal.classList.add("activo");
+};
+
+window.cerrarModalAlumno = function() {
+  document.getElementById("modalAlumno").classList.remove("activo");
+};
+
+// Click fuera del modal
+window.onclick = function(event) {
+  const modal = document.getElementById("modalAlumno");
+  if (event.target === modal) {
+    modal.classList.remove("activo");
   }
 };
 
-window.toggleMateria = function(wid, bid, pIdx) {
-  const wrap = document.getElementById(wid), btn = document.getElementById(bid);
-  const parent = document.getElementById(`det-${pIdx}`);
-  if (!wrap.style.maxHeight) {
-    parent.querySelectorAll(".materia-content-wrapper").forEach(w => w.style.maxHeight = null);
-    parent.querySelectorAll(".subject-box").forEach(b => b.classList.remove("active-materia"));
-    wrap.style.maxHeight = wrap.scrollHeight + "px";
-    btn.classList.add("active-materia");
-  } else {
-    wrap.style.maxHeight = null;
-    btn.classList.remove("active-materia");
-  }
-};
-
-// ── INIT ─────────────────────────────────────────────────
+// ── INIT ───────────────────────────────────────────────────
 window.buscarGrupo = buscarGrupo;
 cargarGrupos();
